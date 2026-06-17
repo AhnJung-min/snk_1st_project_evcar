@@ -1,4 +1,4 @@
-# app/pages/1_전기차비중트렌드.py
+# app/pages/1_EV_Share_Trend.py
 """전국 전기차 비중 트렌드 분석 페이지.
 
 ev_infra.car_ev_status 테이블(지역·월별)을 읽어 월별로 집계해 보여준다.

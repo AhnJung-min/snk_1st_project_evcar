@@ -1,4 +1,4 @@
-# app/pages/2_전기차화재발생현황.py
+# app/pages/2_EV_Fire_Incidents.py
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pages/ → app/ → 프로젝트 루트
