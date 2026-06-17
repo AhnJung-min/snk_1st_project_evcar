@@ -4,176 +4,84 @@
 
 ---
 
-## 디렉토리 구조
+## 📌 팀원 빠른 시작 (CSV 데이터가 있는 경우)
 
-```
-skn_1st_project_evcar/
-│
-├── common/                 ← 팀 공용 모듈 (DB 연결·설정·모델)
-│   ├── config.py           ← .env 읽어서 DB 접속 정보 제공
-│   ├── db.py               ← get_engine() / get_session()
-│   └── models.py           ← SQLAlchemy ORM 모델 (테이블 정의)
-│
-├── data/                   ← 데이터 파일 보관
-│   ├── faq.json            ← [안정민] FAQ 정제본 (커밋 O)
-│   ├── faq.csv             ← [안정민] FAQ 정제본 (커밋 O)
-│   └── *_raw.json/csv      ← 수집 원본 (커밋 X, gitignore)
-│
-├── etl/                    ← [안정민 전용] 데이터 수집·정제·적재
-│   ├── extract.py          ← 한국교통안전공단 FAQ 크롤링
-│   ├── extract_car365.py   ← 자동차365 FAQ 크롤링
-│   ├── extract_ev.py       ← 무공해차 통합누리집 FAQ 크롤링
-│   ├── transform.py        ← 3개 출처 정제 후 faq.json/csv 저장
-│   └── load.py             ← faq.json → MySQL ev_infra.faq 적재
-│
-├── sql/
-│   └── schema.sql          ← DB 테이블 DDL (팀원 테이블 여기에 추가)
-│
-├── app/
-│   ├── dashboard.py        ← [안정민] FAQ 검색 대시보드 (메인)
-│   └── pages/              ← 팀원 대시보드 페이지 추가 위치
-│       └── 예) 2_충전소현황.py
-│
-├── .env                    ← DB 비밀번호 등 (커밋 X, gitignore)
-├── .env.example            ← .env 템플릿 (커밋 O)
-├── requirements.txt
-└── README.md
-```
+> 처음 합류하는 팀원은 여기서 시작하세요. 아래 순서대로만 따라하면 됩니다.
 
 ---
 
-## 기능 설명
-
-### 공용 모듈 (`common/`)
-
-모든 팀원이 DB에 접근할 때 공통으로 쓰는 모듈입니다.
-자신의 파일 상단에서 아래와 같이 가져다 씁니다.
-
-```python
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # 루트 경로 등록
-
-from common.config import settings   # DB 접속 정보, 경로
-from common.db import get_engine     # DB 엔진 (싱글턴)
-```
-
-| 파일 | 역할 |
-|---|---|
-| `config.py` | `.env` 값을 읽어 `settings.database_url` 등 제공 |
-| `db.py` | `get_engine()` — SQLAlchemy 엔진 싱글턴, 커넥션 자동 복구 |
-| `models.py` | `Faq` ORM 모델. 팀원 테이블 모델도 여기에 추가 가능 |
-
-> `app/pages/` 하위 파일은 루트까지 두 단계 올라가야 하므로 `parents[2]` 로 씁니다.
-
----
-
-### 안정민 — FAQ 파이프라인 (`etl/`)
-
-크롤링부터 DB 적재까지 아래 순서로 실행합니다.
-
-```
-1. 수집  python etl/extract.py           # 한국교통안전공단
-         python etl/extract_car365.py    # 자동차365
-         python etl/extract_ev.py        # 무공해차 통합누리집
-
-2. 정제  python etl/transform.py         # 3개 원본 → faq.json / faq.csv
-
-3. 적재  python etl/load.py              # faq.json → MySQL ev_infra.faq
-```
-
-수집된 FAQ 현황 (2025년 기준):
-
-| 출처 | 건수 | 카테고리 예시 |
-|---|---|---|
-| 한국교통안전공단 | 295건 | 자동차검사, 도로안전 등 |
-| 자동차365 | 93건 | 중고차등록, 자동차검사 등 |
-| 무공해차 통합누리집 | 37건 | 충전소 이용, 수소충전소 인프라 등 |
-| **합계** | **425건** | |
-
-> **크롤링은 안정민 님만 실행**합니다. 팀원은 `load.py`만 실행하거나, `faq.json`을 그대로 사용합니다.
-
----
-
-### FAQ 대시보드 (`app/dashboard.py`)
+### STEP 0 — 준비
 
 ```bash
-streamlit run app/dashboard.py
-```
-
-- DB 연결 성공 시 MySQL에서 데이터 읽음
-- DB 없을 때는 `data/faq.json`으로 자동 폴백
-- **출처 → 카테고리 2단계 필터** 지원
-- 키워드 검색 (제목 / 내용 / 전체), 카드형 / 슬라이드형 보기
-
----
-
-## 처음 시작하기 (팀원 공통)
-
-```bash
-# 1. 클론
+# 저장소 클론 (처음 한 번만)
 git clone https://github.com/AhnJung-min/skn_1st_project_evcar.git
 cd skn_1st_project_evcar
 
-# 2. 패키지 설치
+# 패키지 설치
 pip install -r requirements.txt
+```
 
-# 3. DB 접속 정보 설정
+`.env.example`을 복사해서 `.env`를 만들고 DB 비밀번호를 채웁니다.
+
+```bash
 copy .env.example .env   # Windows
-# .env 파일을 열어 DB_PASSWORD 입력
+```
 
-# 4. DB·테이블 생성 (처음 한 번만)
-mysql -u root -p < sql/schema.sql
-
-# 5. FAQ 데이터 적재 (선택 — DB 사용 시)
-python etl/load.py
-
-# 6. 대시보드 실행
-streamlit run app/dashboard.py
+```ini
+# .env
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=여기에_비밀번호_입력
+DB_NAME=ev_infra
 ```
 
 ---
 
-## 팀원 작업 순서
+### STEP 1 — 내 데이터 파일 넣기
 
-### 1. 최신 코드 받기
-```bash
-git pull origin main
-```
-
-### 2. 내 데이터 파일을 `data/`에 넣기
+`data/` 폴더에 CSV 파일을 복사합니다.
 
 ```
 data/
-├── faq.json          ← 안정민 (건드리지 말 것)
-└── 홍길동_ev.csv     ← 본인 파일 추가
+├── faq.json        ← 안정민 (건드리지 말 것)
+└── 홍길동_ev.csv   ← 본인 파일 추가
 ```
 
-파일명에 `_raw`가 들어가면 gitignore가 자동으로 커밋에서 제외합니다.
+> `_raw`가 파일명에 들어가면 gitignore가 자동으로 커밋 제외합니다.
 
-### 3. 내 테이블 DDL을 `sql/schema.sql`에 추가
+---
+
+### STEP 2 — 내 테이블 만들기 (`sql/schema.sql`)
+
+`schema.sql` 하단 팀원 추가 영역에 본인 테이블을 추가하고 실행합니다.
 
 ```sql
--- [홍길동] 충전소 테이블
+-- [홍길동] 예시 테이블
 CREATE TABLE IF NOT EXISTS ev_charger (
-    id          INT           NOT NULL,
-    station_nm  VARCHAR(200)  NOT NULL,
-    addr        VARCHAR(300)  NULL,
-    lat         DECIMAL(10,7) NULL,
-    lng         DECIMAL(10,7) NULL,
-    created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    id         INT            NOT NULL,
+    station_nm VARCHAR(200)   NOT NULL  COMMENT '충전소명',
+    addr       VARCHAR(300)   NULL      COMMENT '주소',
+    lat        DECIMAL(10,7)  NULL      COMMENT '위도',
+    lng        DECIMAL(10,7)  NULL      COMMENT '경도',
+    created_at TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-로컬 DB에 반영:
 ```bash
+# 로컬 DB에 반영 (처음 한 번 + 테이블 추가할 때마다)
 mysql -u root -p < sql/schema.sql
 ```
 
-### 4. 적재 스크립트 작성 (`etl/load_홍길동.py`)
+---
+
+### STEP 3 — 적재 스크립트 작성 (`etl/load_홍길동.py`)
+
+아래 템플릿을 복사해서 파일명과 내용만 본인에 맞게 수정합니다.
 
 ```python
+# etl/load_홍길동.py
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -183,10 +91,22 @@ from common.config import settings
 from common.db import get_engine
 
 def main():
+    # 1) 데이터 읽기
     df = pd.read_csv(settings.DATA_DIR / "홍길동_ev.csv", encoding="utf-8-sig")
-    df.rename(columns={"충전소명": "station_nm", "주소": "addr"}, inplace=True)
+
+    # 2) 컬럼명을 테이블 컬럼명으로 맞추기
+    df = df.rename(columns={
+        "충전소명": "station_nm",
+        "주소":    "addr",
+        "위도":    "lat",
+        "경도":    "lng",
+    })
+
+    # 3) DB에 저장
+    #    if_exists="append"  → 기존 데이터에 추가
+    #    if_exists="replace" → 기존 데이터 삭제 후 재적재
     df.to_sql("ev_charger", con=get_engine(), if_exists="append", index=False)
-    print(f"적재 완료: {len(df)}건")
+    print(f"적재 완료: ev_infra.ev_charger ({len(df)}건)")
 
 if __name__ == "__main__":
     main()
@@ -196,16 +116,21 @@ if __name__ == "__main__":
 python etl/load_홍길동.py
 ```
 
-### 5. 대시보드 페이지 추가 (`app/pages/2_충전소현황.py`)
+---
 
-파일명 앞 숫자가 사이드바 순서가 됩니다.
+### STEP 4 — 대시보드 페이지 만들기 (`app/pages/2_충전소현황.py`)
+
+`app/pages/` 에 파일을 추가하면 사이드바에 자동으로 메뉴가 생깁니다.  
+파일명 앞 숫자가 메뉴 순서입니다 (예: `2_충전소현황.py` → 두 번째 메뉴).
 
 ```python
+# app/pages/2_충전소현황.py
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pages/는 parents[2]
 
-import pandas as pd, streamlit as st
+import pandas as pd
+import streamlit as st
 from common.config import settings
 from common.db import get_engine
 
@@ -217,43 +142,139 @@ def load_data():
     try:
         return pd.read_sql("SELECT * FROM ev_charger", get_engine())
     except Exception:
+        # DB 없을 때 CSV로 대신 보여주기
         return pd.read_csv(settings.DATA_DIR / "홍길동_ev.csv", encoding="utf-8-sig")
 
-st.dataframe(load_data())
+df = load_data()
+st.dataframe(df)
+# 여기 아래에 본인 시각화 코드 작성
 ```
 
-### 6. 커밋 & 푸시
-
-**본인이 추가한 파일만** 명시적으로 add합니다.
+대시보드 실행:
 
 ```bash
-git add data/홍길동_ev.csv etl/load_홍길동.py sql/schema.sql app/pages/2_충전소현황.py
+streamlit run app/dashboard.py
+```
+
+---
+
+### STEP 5 — 커밋 & 푸시
+
+**본인이 만든 파일만** 골라서 올립니다. 다른 사람 파일을 건드리면 충돌이 납니다.
+
+```bash
+# 내 파일만 스테이징
+git add data/홍길동_ev.csv
+git add etl/load_홍길동.py
+git add sql/schema.sql            # 내 테이블 DDL 추가했을 때만
+git add app/pages/2_충전소현황.py
+
+# 커밋
 git commit -m "feat: [홍길동] 충전소 데이터 적재 및 대시보드 추가"
-git pull origin main   # push 전 최신화 (충돌 방지)
+
+# push 전에 반드시 최신 코드 먼저 받기 (충돌 방지)
+git pull origin main
 git push origin main
 ```
 
 ---
 
-## 담당 현황
+## 디렉토리 구조
 
-| 담당 | 데이터셋 | 주요 파일 | 테이블 | 진행 |
-|---|---|---|---|---|
-| 안정민 | 자동차 FAQ 3개 사이트 | `etl/extract*.py` `etl/load.py` | `faq` | ✅ |
-| (팀원) | (본인 데이터셋) | `etl/load_<이름>.py` | (추가) | - |
+```
+skn_1st_project_evcar/
+│
+├── common/                 ← 팀 공용 모듈 (모든 팀원이 import해서 씀)
+│   ├── config.py           ← DB 접속 정보, 파일 경로 (settings 객체)
+│   ├── db.py               ← get_engine() — DB 엔진 싱글턴
+│   └── models.py           ← SQLAlchemy ORM 모델
+│
+├── data/                   ← 데이터 파일
+│   ├── faq.json / faq.csv  ← [안정민] FAQ 데이터
+│   └── *_raw.*             ← 원본 파일 (gitignore, 커밋 안 됨)
+│
+├── etl/                    ← 데이터 수집 · 적재 스크립트
+│   ├── extract*.py         ← [안정민 전용] 크롤링
+│   ├── transform.py        ← [안정민 전용] 정제
+│   ├── load.py             ← [안정민] faq 적재
+│   └── load_<이름>.py      ← [팀원] 본인 데이터 적재
+│
+├── sql/
+│   └── schema.sql          ← DB 테이블 정의 (팀원 테이블도 여기 추가)
+│
+├── app/
+│   ├── dashboard.py        ← [안정민] FAQ 대시보드 (메인 페이지)
+│   └── pages/
+│       └── <N>_<이름>.py   ← [팀원] 본인 대시보드 페이지
+│
+├── .env                    ← DB 비밀번호 (커밋 X)
+├── .env.example            ← .env 템플릿 (커밋 O)
+├── requirements.txt
+└── README.md
+```
 
 ---
 
-## 자주 묻는 것들
+## 공용 모듈 (`common/`) 사용법
 
-**Q. `.env`를 커밋하면 안 되나요?**
-`.gitignore`에 등록되어 있어 `git add .`해도 자동으로 제외됩니다. DB 비밀번호가 GitHub에 올라가면 안 되니 절대 강제 추가하지 마세요.
+DB 접속 코드를 직접 쓰지 말고 아래처럼 가져다 씁니다.
 
-**Q. DB 없이 대시보드를 실행할 수 있나요?**
-네. DB 연결 실패 시 `data/faq.json`으로 자동 폴백합니다. DB 없이도 FAQ 검색은 동작합니다.
+```python
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # etl/ 기준
+# app/pages/ 파일은 parents[2]
 
-**Q. `requirements.txt`에 패키지를 추가해도 되나요?**
-필요한 패키지가 있으면 추가하고 같이 커밋해 주세요.
+from common.config import settings   # settings.DATA_DIR, settings.database_url
+from common.db import get_engine     # SQLAlchemy 엔진 (싱글턴)
+```
 
-**Q. `schema.sql`에서 충돌이 났어요.**
-여러 명이 수정할 수 있는 유일한 공유 파일입니다. push 전 반드시 `git pull`을 먼저 해서 최신화하세요.
+| 모듈 | 제공하는 것 | 사용 예 |
+|---|---|---|
+| `common.config` | `settings.DATA_DIR` — data/ 경로 | `settings.DATA_DIR / "파일.csv"` |
+| `common.db` | `get_engine()` — DB 엔진 | `pd.read_sql("SELECT ...", get_engine())` |
+| `common.models` | `Faq` ORM 클래스 | 필요한 경우 팀원 모델도 추가 가능 |
+
+---
+
+## 안정민 — FAQ 파이프라인
+
+```bash
+python etl/extract.py          # 한국교통안전공단 크롤링
+python etl/extract_car365.py   # 자동차365 크롤링
+python etl/extract_ev.py       # 무공해차 통합누리집 크롤링
+python etl/transform.py        # 정제·병합 → faq.json / faq.csv
+python etl/load.py             # MySQL 적재
+```
+
+| 출처 | 건수 |
+|---|---|
+| 한국교통안전공단 | 295건 |
+| 자동차365 | 93건 |
+| 무공해차 통합누리집 | 37건 |
+| **합계** | **425건** |
+
+---
+
+## 담당 현황
+
+| 담당 | 데이터셋 | 테이블 | 진행 |
+|---|---|---|---|
+| 안정민 | 자동차 FAQ (3개 사이트) | `faq` | ✅ |
+| (팀원) | (본인 데이터셋) | (추가) | - |
+
+---
+
+## FAQ
+
+**Q. DB 없이 대시보드를 볼 수 있나요?**  
+네. DB 연결 실패 시 CSV 파일로 자동 폴백합니다. `except` 블록에 CSV 경로를 넣어두면 됩니다.
+
+**Q. `.env`를 실수로 커밋하면 어떻게 되나요?**  
+`.gitignore`에 등록되어 있어 `git add .`해도 자동 제외됩니다. 절대 강제로 추가하지 마세요.
+
+**Q. `schema.sql`에서 충돌이 났어요.**  
+여러 명이 건드리는 유일한 공유 파일입니다. push 전에 반드시 `git pull`을 먼저 해주세요.
+
+**Q. `requirements.txt`에 패키지를 추가해도 되나요?**  
+추가하고 같이 커밋해 주세요.
