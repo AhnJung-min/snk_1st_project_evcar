@@ -1,8 +1,18 @@
 import os
+import sys
 import csv
+from pathlib import Path
+
 from datetime import datetime
 import pymysql
+
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # etl/ → 프로젝트 루트
+
+import pandas as pd
+from common.config import settings
+from common.db import get_engine
 
 # 1. .env 파일 로드
 load_dotenv()
@@ -17,12 +27,12 @@ db_connection = pymysql.connect(
     cursorclass=pymysql.cursors.DictCursor
 )
 
-csv_file_path = "C:/Users/playdata2/Desktop/SKN_33_AI/skn_1st_project_evcar/data/신가을_전기차 화재 발생 현황_20241231.csv"
+csv_path = settings.DATA_DIR / "신가을_전기차 화재 발생 현황_20241231.csv"
 
 try:
     with db_connection.cursor() as cursor:
         # 3. CSV 파일 읽기 (utf-8 처리)
-        with open(csv_file_path, mode='r', encoding='utf-8') as f:
+        with open(csv_path, mode='r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
 
             insert_query = """

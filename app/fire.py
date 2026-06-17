@@ -1,7 +1,7 @@
 # app/pages/3_전기차 화재 발생 현황.py
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pages/는 parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # pages/는 parents[2]
 
 import pandas as pd
 import streamlit as st
@@ -28,7 +28,7 @@ def load_data():
         return pd.read_csv(settings.DATA_DIR / "신가을_전기차 화재 발생 현황_20241231.csv", encoding="utf-8-sig")
 
 # 데이터 불러오기
-df = load_data()
+df_raw = load_data()
 
 # --------------------------------------------
 # 3. 사이드바 대화형 필터 (Interactive Filters) 구성
@@ -70,7 +70,7 @@ st.subheader("📊 필터링된 데이터 요약")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(label="🚨 총 화재 발생", value=f"{len(df)} 건", delta=f"전체 {len(df_raw)}건 중"
+    st.metric(label="🚨 총 화재 발생", value=f"{len(df)} 건", delta=f"전체 {len(df_raw)}건 중")
 
 with col2:
     top_reg = df['sido'].value_counts().idxmax()
@@ -115,7 +115,7 @@ with row1_col2:
     fig_bar = px.bar(region_counts, x='화재건수', y='지역', orientation='h',
                      text='화재건수', color='화재건수',
                      color_continuous_scale='Oranges', title="지역별 화재 빈도")
-    fig_bar.update_layout(yaxis={'categoryorder': 'total asscending'})  # 빈도 많은 순 정렬
+    fig_bar.update_layout(yaxis={'categoryorder': 'total ascending'})  # 빈도 많은 순 정렬
     st.plotly_chart(fig_bar, use_container_width=True)
 
 st.write("---")
@@ -128,7 +128,35 @@ row2_col1, row2_col2 = st.columns(2)
 with row2_col1:
     st.subheader("⚡ 발화요인 계층 분석 (대분류 → 소분류)")
     # 대분류 하위로 소분류 구분을 한눈에 보여주는 트리맵(Treemap) 차트
-    
+    fig_tree = px.treemap(df, path=['ignition_main_category', 'ignition_sub_category'],
+                          title="발화요인 대/소분류 비중 (네모 크기=발생 빈도)")
+    st.plotly_chart(fig_tree, use_container_width=True)
 
-st.dataframe(df)
-# 여기 아래에 본인 시각화 코드 작성
+with row2_col2:
+    st.subheader("🏢 공간별 지상 / 지하 화재 비율")
+    # 도넛 차트 구성
+    fig_donut = px.pie(df, names='ground_level', hole=0.4,
+                       title="공간구분별 비율",
+                       color_discrete_sequence=px.colors.qualitative.Pastel)
+    fig_donut.update_traces(textinfo='percent+label')
+    st.plotly_chart(fig_donut, use_container_width=True)
+
+st.write("---")
+
+# --------------------------------------------
+# 7. 시각화 파트 3: 차량 상태별 x 발화요인 복합 교차 분석
+# --------------------------------------------
+st.subheader("🔀 차량 상태별 발화요인 교차 분석")
+st.markdown("차량이 특정 상태(충전중/주차/운행중)일 때 어떤 화재 원인이 주로 발생하는지 복합 비교합니다.")
+
+# 누적 막대 그래프(Stacked Bar Chart) 구성
+fig_stack = px.bar(df, x='vehicle_status', color='ignition_main_category',
+                   labels={'vehicle_status': '차량 상태', 'ignition_main_category': '발화요인 대분류', 'count': '건수'},
+                   barmode='stack')
+st.plotly_chart(fig_stack, use_container_width=True)
+
+st.write("---")
+
+# 8. 하단 원본 데이터 그리드 제공
+with st.expander("🔎 필터링 된 원본 데이터 세부 확인"):
+    st.dataframe(df, use_container_width=True)
