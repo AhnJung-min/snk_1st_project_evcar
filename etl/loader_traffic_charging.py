@@ -13,10 +13,11 @@ from common.db import get_engine
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_PATH = settings.DATA_DIR / "고속도로_전기차_통행_및_충전데이터.xlsx"
 
-# 시트당 적재 행 수 제한. None 이면 전체, 숫자면 앞에서 그만큼만 읽는다.
-# 데이터가 매우 커서(원본 ~70MB) 기본은 시트당 100,000행으로 자른다.
-# 전체를 적재하려면 ROW_LIMIT = None 으로 바꾼다.
-ROW_LIMIT = 100_000
+# 적재 기간(날짜) 필터. 두 데이터가 겹치는 "가장 유의미한 최근 1년"만 사용한다.
+#   - 충전: 2023-01~2025-08, 통행: 2024-10~2025-09 → 겹치는 1년 창으로 자름
+# 전체를 적재하려면 DATE_START = None 으로 바꾼다.
+DATE_START = "2024-09-01"
+DATE_END = "2025-08-31"
 
 
 def log(message):
@@ -37,20 +38,43 @@ def clean_columns(df):
     return df
 
 
+def _filter_period(df, date_series):
+    """date_series(파싱된 날짜) 기준으로 [DATE_START, DATE_END] 행만 남긴다."""
+    if DATE_START is None:
+        return df
+    mask = (date_series >= pd.Timestamp(DATE_START)) & (date_series <= pd.Timestamp(DATE_END))
+    return df[mask]
+
+
 def load_excel():
     if not DATA_PATH.exists():
         raise FileNotFoundError(f"엑셀 파일을 찾을 수 없습니다: {DATA_PATH}")
 
     excel_file = pd.ExcelFile(DATA_PATH)
     log(f"시트 목록: {excel_file.sheet_names}")
+    log("전체 데이터를 읽은 뒤 기간으로 자릅니다.")
 
-    if ROW_LIMIT is None:
-        log("전체 데이터를 읽습니다.")
-    else:
-        log(f"각 시트 앞 {ROW_LIMIT:,}행만 읽습니다. (전체는 ROW_LIMIT=None)")
+    charger_df = clean_columns(pd.read_excel(excel_file, sheet_name=1))
+    traffic_df = clean_columns(pd.read_excel(excel_file, sheet_name=2))
 
-    charger_df = pd.read_excel(excel_file, sheet_name=1, nrows=ROW_LIMIT)
-    traffic_df = pd.read_excel(excel_file, sheet_name=2, nrows=ROW_LIMIT)
+    if DATE_START is not None:
+        before_c, before_t = len(charger_df), len(traffic_df)
+
+        # 충전: '충전시작일'(datetime)
+        charge_date = pd.to_datetime(charger_df["충전시작일"], errors="coerce")
+        charger_df = _filter_period(charger_df, charge_date)
+
+        # 통행: '출구진출일자'(YYYYMMDD, 일부 '.0' 포함)
+        traffic_raw = (
+            traffic_df["출구진출일자"].astype(str).str.replace(".0", "", regex=False).str.strip()
+        )
+        traffic_date = pd.to_datetime(traffic_raw, format="%Y%m%d", errors="coerce")
+        traffic_df = _filter_period(traffic_df, traffic_date)
+
+        log(
+            f"기간 필터({DATE_START}~{DATE_END}): "
+            f"충전 {before_c:,}→{len(charger_df):,}, 통행 {before_t:,}→{len(traffic_df):,}"
+        )
 
     return charger_df, traffic_df
 
