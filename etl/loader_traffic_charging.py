@@ -5,7 +5,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # etl/ → 프로젝트 루트
 
 import pandas as pd
-from sqlalchemy import text
 
 from common.config import settings
 from common.db import get_engine
@@ -14,8 +13,10 @@ from common.db import get_engine
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_PATH = settings.DATA_DIR / "고속도로_전기차_통행_및_충전데이터.xlsx"
 
-TEST_MODE = False
-TEST_ROWS = 100
+# 시트당 적재 행 수 제한. None 이면 전체, 숫자면 앞에서 그만큼만 읽는다.
+# 데이터가 매우 커서(원본 ~70MB) 기본은 시트당 100,000행으로 자른다.
+# 전체를 적재하려면 ROW_LIMIT = None 으로 바꾼다.
+ROW_LIMIT = 100_000
 
 
 def log(message):
@@ -43,14 +44,13 @@ def load_excel():
     excel_file = pd.ExcelFile(DATA_PATH)
     log(f"시트 목록: {excel_file.sheet_names}")
 
-    if TEST_MODE:
-        log(f"TEST_MODE=True: 각 시트 {TEST_ROWS}행만 읽습니다.")
-        charger_df = pd.read_excel(excel_file, sheet_name=1, nrows=TEST_ROWS)
-        traffic_df = pd.read_excel(excel_file, sheet_name=2, nrows=TEST_ROWS)
-    else:
+    if ROW_LIMIT is None:
         log("전체 데이터를 읽습니다.")
-        charger_df = pd.read_excel(excel_file, sheet_name=1)
-        traffic_df = pd.read_excel(excel_file, sheet_name=2)
+    else:
+        log(f"각 시트 앞 {ROW_LIMIT:,}행만 읽습니다. (전체는 ROW_LIMIT=None)")
+
+    charger_df = pd.read_excel(excel_file, sheet_name=1, nrows=ROW_LIMIT)
+    traffic_df = pd.read_excel(excel_file, sheet_name=2, nrows=ROW_LIMIT)
 
     return charger_df, traffic_df
 
@@ -133,13 +133,6 @@ def prepare_raw_traffic(df):
     return df[cols].astype(str)
 
 
-def truncate_raw_tables(engine):
-    log("raw 테이블 초기화")
-    with engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE raw_ev_charger_daily"))
-        conn.execute(text("TRUNCATE TABLE raw_highway_traffic"))
-
-
 def main():
     log("raw 적재 시작")
 
@@ -149,12 +142,12 @@ def main():
     charger_raw = prepare_raw_charger(charger_raw)
     traffic_raw = prepare_raw_traffic(traffic_raw)
 
-    truncate_raw_tables(engine)
-
+    # if_exists="replace": 테이블이 없으면 생성, 있으면 비우고 새로 적재(재실행 안전).
+    # schema.sql 을 미리 실행하지 않아도 raw 테이블이 자동 생성된다.
     charger_raw.to_sql(
         name="raw_ev_charger_daily",
         con=engine,
-        if_exists="append",
+        if_exists="replace",
         index=False,
         chunksize=1000,
         method="multi",
@@ -163,7 +156,7 @@ def main():
     traffic_raw.to_sql(
         name="raw_highway_traffic",
         con=engine,
-        if_exists="append",
+        if_exists="replace",
         index=False,
         chunksize=1000,
         method="multi",
