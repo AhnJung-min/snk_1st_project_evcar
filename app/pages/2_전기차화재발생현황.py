@@ -1,7 +1,7 @@
-# app/pages/3_전기차 화재 발생 현황.py
+# app/pages/2_전기차화재발생현황.py
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # pages/는 parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pages/ → app/ → 프로젝트 루트
 
 import pandas as pd
 import streamlit as st
