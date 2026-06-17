@@ -1,51 +1,97 @@
-import os
+# app/pages/1_전기차비중트렌드.py
+"""전국 전기차 비중 트렌드 분석 페이지.
+
+ev_infra.car_ev_status 테이블(지역·월별)을 읽어 월별로 집계해 보여준다.
+DB 접속 실패 시 data/general_num.csv + ev_num.csv 로 직접 계산해 폴백한다.
+"""
 import csv
-import streamlit as st
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # app/pages/ → 프로젝트 루트
+
 import pandas as pd
-import plotly.express as px
+import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# 페이지 설정
+from common.config import settings
+from common.db import get_engine
+
 st.set_page_config(page_title="대한민국 전기차 비중 트렌드", layout="wide")
 
+TARGET_MONTHS = ['2024-08', '2024-09', '2024-10', '2024-11', '2024-12', '2025-01', '2025-02']
+
+
 # ==========================================================
-# 📊 1. 데이터 정제 및 계산 로직
+# 📊 1. 데이터 로드 (DB 우선, 실패 시 CSV 폴백)
 # ==========================================================
-general_monthly_total = {}
-ev_monthly_total = {}
+def _region_df_from_csv() -> pd.DataFrame:
+    """car_ev_status 와 동일한 컬럼 구조(지역·월별)를 CSV 에서 직접 만든다."""
+    general_data = {}
+    with open(settings.DATA_DIR / "general_num.csv", encoding="cp949") as f:
+        reader = csv.reader(f)
+        next(reader)
+        next(reader)
+        for row in reader:
+            if not row or len(row) < 4:
+                continue
+            연월, 지역 = row[0].strip(), row[1].strip()
+            try:
+                총계 = int(row[-2].strip() + row[-1].strip())
+            except ValueError:
+                총계 = int(row[-1].strip()) if row[-1].strip().isdigit() else 0
+            general_data[(연월, 지역)] = general_data.get((연월, 지역), 0) + 총계
 
-# [일반 자동차]
-with open(r'C:/SKN_AI/skn_1st_project_evcar/data/general_num.csv', mode='r', encoding='cp949') as f:
-    reader = csv.reader(f)
-    next(reader);
-    next(reader)
-    for row in reader:
-        if not row or len(row) < 4: continue
-        연월 = row[0].strip()
-        try:
-            진짜총계 = int(row[-2].strip() + row[-1].strip())
-        except:
-            진짜총계 = int(row[-1].strip()) if row[-1].strip().isdigit() else 0
-        general_monthly_total[연월] = general_monthly_total.get(연월, 0) + 진짜총계
+    rows = []
+    with open(settings.DATA_DIR / "ev_num.csv", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+        for row in reader:
+            if not row:
+                continue
+            연월 = row[0][:7].strip()
+            for idx in range(1, len(row)):
+                지역 = headers[idx].strip()
+                clean = row[idx].replace(",", "").strip()
+                if not clean.isdigit():
+                    continue
+                전체 = general_data.get((연월, 지역))
+                if 전체 is None:
+                    continue
+                rows.append({"base_month": 연월, "total_cars": 전체, "ev_cars": int(clean)})
+    return pd.DataFrame(rows, columns=["base_month", "total_cars", "ev_cars"])
 
-# [전기차]
-with open(r'C:/SKN_AI/skn_1st_project_evcar/data/ev_num.csv', mode='r', encoding='utf-8') as f:
-    reader = csv.reader(f)
-    next(reader)
-    for row in reader:
-        if not row: continue
-        연월 = row[0][:7].strip()
-        행의총합 = sum(int(v.replace(',', '').strip()) for v in row[1:] if v.strip().replace(',', '').isdigit())
-        ev_monthly_total[연월] = 행의총합
 
-target_months = ['2024-08', '2024-09', '2024-10', '2024-11', '2024-12', '2025-01', '2025-02']
-df_result = pd.DataFrame([
-    {'연월': m, '총 자동차 대수 (A)': general_monthly_total.get(m, 0), '총 전기차 대수 (B)': ev_monthly_total.get(m, 0),
-     '전기차 비중 (%)': round((ev_monthly_total.get(m, 0) / general_monthly_total.get(m, 0)) * 100,
-                         2) if general_monthly_total.get(m, 0) > 0 else 0}
-    for m in target_months
-])
+@st.cache_data(ttl=600)
+def load_monthly():
+    """car_ev_status 를 월별로 집계해 반환. (df_result, 출처문자열)"""
+    try:
+        region_df = pd.read_sql(
+            "SELECT base_month, total_cars, ev_cars FROM car_ev_status", get_engine())
+        src = "MySQL(ev_infra.car_ev_status)"
+    except Exception:
+        region_df = _region_df_from_csv()
+        src = "CSV (폴백)"
+
+    g = region_df.groupby("base_month", as_index=False)[["total_cars", "ev_cars"]].sum()
+    monthly = {r["base_month"]: r for _, r in g.iterrows()}
+
+    df = pd.DataFrame([
+        {
+            '연월': m,
+            '총 자동차 대수 (A)': int(monthly.get(m, {}).get("total_cars", 0)),
+            '총 전기차 대수 (B)': int(monthly.get(m, {}).get("ev_cars", 0)),
+            '전기차 비중 (%)': round(
+                monthly.get(m, {}).get("ev_cars", 0) / monthly.get(m, {}).get("total_cars", 0) * 100, 2)
+            if monthly.get(m, {}).get("total_cars", 0) else 0,
+        }
+        for m in TARGET_MONTHS
+    ])
+    return df, src
+
+
+df_result, data_source = load_monthly()
 
 # 💡 [글로벌 사전 계산] 전월 대비 증감분 및 전환율 일괄 처리
 df_result['일반차 증가'] = df_result['총 자동차 대수 (A)'].diff()
@@ -80,14 +126,14 @@ st.markdown("""
 
     /* 💎 4. 맥북 UI 감성의 세련된 실버-그레이 스퀘어클 버튼 테마 */
     div.stRadio label {
-        background-color: #F1F5F9; 
-        border: 1px solid #E2E8F0; 
-        border-radius: 12px; 
+        background-color: #F1F5F9;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
         padding: 10px 26px;
-        color: #475569; 
+        color: #475569;
         font-size: 0.9rem;
         font-weight: 600;
-        letter-spacing: -0.02em; 
+        letter-spacing: -0.02em;
         cursor: pointer;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
@@ -121,10 +167,11 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
+st.caption(f"데이터 출처: {data_source}")
 st.divider()
 
 # 기간 선택
-month_labels = [f"{m.split('-')[0]}년 {int(m.split('-')[1])}월" for m in target_months]
+month_labels = [f"{m.split('-')[0]}년 {int(m.split('-')[1])}월" for m in TARGET_MONTHS]
 selected_label = st.radio("기간 선택", month_labels, label_visibility="collapsed", horizontal=True)
 i = month_labels.index(selected_label)
 selected_data = df_result.iloc[i]
@@ -167,7 +214,7 @@ with left_col:
 
 with right_col:
     df_chart = df_result.copy()
-    df_chart['is_selected'] = df_chart['연월'] == target_months[i]
+    df_chart['is_selected'] = df_chart['연월'] == TARGET_MONTHS[i]
 
     # 이중축 서브플롯 베이스 생성
     fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -231,7 +278,7 @@ with right_col:
 
 st.divider()
 st.subheader("📋 연월별 상세 데이터 (전체 기간)")
-df_formatted = df_result.copy()
+df_formatted = df_result[['연월', '총 자동차 대수 (A)', '총 전기차 대수 (B)', '전기차 비중 (%)']].copy()
 df_formatted['연월'] = df_formatted['연월'].apply(lambda x: f"{x.split('-')[0]}년 {int(x.split('-')[1])}월")
 df_formatted['총 자동차 대수 (A)'] = df_formatted['총 자동차 대수 (A)'].map('{:,}대'.format)
 df_formatted['총 전기차 대수 (B)'] = df_formatted['총 전기차 대수 (B)'].map('{:,}대'.format)
