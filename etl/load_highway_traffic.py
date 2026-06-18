@@ -88,5 +88,7 @@ def main():
 
 
 # 확인용
+
+## pull push 확인용
 if __name__ == "__main__":
     main()

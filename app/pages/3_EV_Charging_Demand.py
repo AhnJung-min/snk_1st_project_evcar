@@ -1,4 +1,4 @@
-# app/pages/3_전기차충전수요분석.py
+# app/pages/3_EV_Charging_Demand.py
 """EV 통행량과 충전 수요 분석 화면.
 
 ev_infra DB(ev_charging_analysis / ev_traffic_analysis / ev_charging_map_analysis)를
